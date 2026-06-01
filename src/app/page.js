@@ -180,19 +180,6 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Guest Warning Banner */}
-        {status !== "loading" && !session?.user && (
-          <div className="flex items-start gap-3 p-4 bg-amber-950/20 border border-amber-900/60 rounded-xl text-amber-200">
-            <FaExclamationTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <p className="text-xs font-bold">Unauthenticated Guest</p>
-              <p className="text-[10px] text-amber-300/80 leading-relaxed">
-                You are playing as a guest. Please sign in with Google to enable predictions and creations.
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Multi-Portrait Uploader Grid */}
         <div className="border border-zinc-900 bg-[#0d0d10]/40 rounded p-4 space-y-3">
           <div className="flex justify-between items-center">
