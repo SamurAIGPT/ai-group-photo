@@ -11,7 +11,7 @@
 
 **GitHub Repository:** [github.com/SamurAIGPT/ai-group-photo](https://github.com/SamurAIGPT/ai-group-photo)
 
-**Live Demo:** [ai-group-photo.vercel.app](https://ai-group-photo.vercel.app/)
+**Live Demo:** [ai-group-photo-mocha.vercel.app](https://ai-group-photo-mocha.vercel.app/)
 
 ---
 
@@ -83,9 +83,9 @@ AI Group Photo is a premium SaaS web application that merges portraits into real
 4. **Build Script**: Project builds automatically using `prisma generate && next build`.
 5. **Database sync**: Run `npx prisma db push` to generate tables.
 6. **Callbacks**:
-   - Google: `https://ai-group-photo.vercel.app/api/auth/callback/google`
-   - Stripe Webhook: `https://ai-group-photo.vercel.app/api/webhook/stripe`
-   - MuAPI: `https://ai-group-photo.vercel.app/api/webhook/muapi`
+   - Google: `https://ai-group-photo-mocha.vercel.app/api/auth/callback/google`
+   - Stripe Webhook: `https://ai-group-photo-mocha.vercel.app/api/webhook/stripe`
+   - MuAPI: `https://ai-group-photo-mocha.vercel.app/api/webhook/muapi`
 
 ---
 

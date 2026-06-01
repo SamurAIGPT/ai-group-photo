@@ -7,7 +7,7 @@ export default function PrivacyPolicy() {
           Last updated: June 1, 2026
         </p>
         <p>
-          At AI Group Photo, accessible from ai-group-photo.vercel.app, one of our main priorities is the privacy of our visitors. This Privacy Policy document contains types of information that is collected and recorded by AI Group Photo and how we use it.
+          At AI Group Photo, accessible from ai-group-photo-mocha.vercel.app, one of our main priorities is the privacy of our visitors. This Privacy Policy document contains types of information that is collected and recorded by AI Group Photo and how we use it.
         </p>
         <h2 className="text-xl font-bold text-zinc-200 mt-8">Information We Collect</h2>
         <p>
