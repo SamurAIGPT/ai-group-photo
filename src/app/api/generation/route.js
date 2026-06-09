@@ -2,199 +2,108 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { UserService } from "@/lib/services/user";
-import config from "@/lib/config";
-
-// Mock template images for fallback
-const MOCK_GROUP_PHOTOS = [
-  "https://images.unsplash.com/photo-1543007630-9710e4a00a20?auto=format&fit=crop&w=800&q=80",
-  "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80",
-  "https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=800&q=80",
-  "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=800&q=80",
-];
+import { AIService } from "@/lib/services/ai";
 
 export async function POST(req) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return new NextResponse("Unauthorized", { status: 401 });
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Unauthorized. Please sign in." }, { status: 401 });
     }
 
     const body = await req.json();
-    const { prompt, inputImages, aspectRatio, resolution } = body;
+    const { prompt, inputImage, aspectRatio, modelEndpoint, appId, ...customParams } = body;
+    const userId = session.user.id;
 
-    if (!inputImages || !Array.isArray(inputImages) || inputImages.length === 0) {
-      return new NextResponse("Missing input portrait images", { status: 400 });
+    if (!prompt) {
+      return NextResponse.json({ error: "Missing required prompt parameter" }, { status: 400 });
     }
 
-    // 1. Deduct credits
-    const cost = config.ai.generationCost || 18;
-    try {
-      await UserService.deductCredits(session.user.id, cost);
-    } catch (err) {
-      return new NextResponse("Insufficient credits", { status: 402 });
-    }
+    // Lookup AppInstance config if appId is provided
+    let endpointToCall = modelEndpoint || "predictions";
+    let formattedPrompt = prompt;
 
-    const apiKey = config.ai.apiKey;
-    let resultImage = "";
-    let requestId = `mock_${Date.now()}`;
-    let status = "processing";
+    let creditCost = 1;
+    let modelName = null;
 
-    // Sequentially upload base64 images to MuAPI CDN if they start with data:
-    const imagesList = [];
-    if (apiKey && !apiKey.includes("your_") && apiKey.trim() !== "") {
-      for (let i = 0; i < inputImages.length; i++) {
-        let img = inputImages[i];
-        if (img.startsWith("data:")) {
-          try {
-            const base64Data = img.split(",")[1];
-            const mimeType = img.split(";")[0].split(":")[1] || "image/png";
-            const ext = mimeType.split("/")[1] || "png";
-            const buffer = Buffer.from(base64Data, "base64");
-            
-            const fd = new FormData();
-            const blob = new Blob([buffer], { type: mimeType });
-            fd.append("file", blob, `input_${i}_${Date.now()}.${ext}`);
+    if (appId) {
+      const appInstance = await prisma.appInstance.findUnique({
+        where: { id: appId },
+      });
 
-            const uploadRes = await fetch("https://api.muapi.ai/api/v1/upload_file", {
-              method: "POST",
-              headers: {
-                "x-api-key": apiKey,
-              },
-              body: fd,
-            });
-
-            if (uploadRes.ok) {
-              const uploadJson = await uploadRes.json();
-              img = uploadJson.url || uploadJson.file_url;
-            } else {
-              console.error(`Failed to upload image index ${i} to MuAPI CDN:`, uploadRes.status);
-            }
-          } catch (uploadErr) {
-            console.error(`Error uploading base64 image index ${i}:`, uploadErr);
-          }
-        }
-        imagesList.push(img);
+      if (!appInstance || appInstance.userId !== userId) {
+        return NextResponse.json({ error: "App instance not found or access denied" }, { status: 404 });
       }
-    } else {
-      // In mock/development fallback mode, keep imagesList as is
-      imagesList.push(...inputImages);
-    }
 
-    if (apiKey && !apiKey.includes("your_") && apiKey.trim() !== "") {
-      try {
-        const webhookUrl = `${config.auth.webhook_url}/api/webhook/muapi`;
+      const parsedConfig = appInstance.config ? JSON.parse(appInstance.config) : {};
+      
+      let baseCost = 1;
+      if (parsedConfig.creditCost !== undefined) {
+        baseCost = Number(parsedConfig.creditCost);
+      }
+      creditCost = baseCost;
 
-        const submitRes = await fetch(
-          `https://api.muapi.ai/api/v1/nano-banana-2-edit?webhook=${encodeURIComponent(webhookUrl)}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-api-key": apiKey,
-            },
-            body: JSON.stringify({
-              prompt: prompt,
-              images_list: imagesList,
-              aspect_ratio: aspectRatio || "1:1",
-              resolution: resolution || "1k",
-            }),
+      // Dynamic credit cost calculation
+      const userParams = parsedConfig.userParams || [];
+      if (Array.isArray(userParams)) {
+        userParams.forEach(param => {
+          let val = customParams[param.key];
+          if (val === undefined) {
+            val = param.defaultValue;
           }
-        );
 
-        if (submitRes.ok) {
-          const resJson = await submitRes.json();
-          console.log("[GENERATION] MuAPI submit response:", JSON.stringify(resJson));
-          requestId = resJson.request_id || resJson.id || requestId;
-
-          // Poll for result (max 60s, 12 attempts x 5s)
-          let completed = false;
-          let attempts = 0;
-          const maxAttempts = 12;
-
-          while (!completed && attempts < maxAttempts) {
-            await new Promise((resolve) => setTimeout(resolve, 5000));
-            attempts++;
-
-            try {
-              const pollRes = await fetch(
-                `https://api.muapi.ai/api/v1/predictions/${requestId}/result`,
-                {
-                  method: "GET",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "x-api-key": apiKey,
-                  },
-                }
-              );
-
-              if (pollRes.ok) {
-                const pollJson = await pollRes.json();
-                console.log(`[GENERATION] Poll attempt ${attempts}:`, JSON.stringify(pollJson).slice(0, 300));
-                const state = pollJson.status || pollJson.state;
-
-                if (state === "completed" || state === "succeeded") {
-                  const outputs = pollJson.outputs || [];
-                  resultImage =
-                    outputs[0] ||
-                    (pollJson.output ? pollJson.output[0] : "") ||
-                    pollJson.video || "";
-                  if (resultImage) {
-                    status = "completed";
-                    completed = true;
-                  }
-                } else if (state === "failed" || state === "cancelled") {
-                  console.error("[GENERATION] MuAPI job failed:", pollJson);
-                  status = "failed";
-                  break;
-                }
+          if (param.type === "enum") {
+            if (param.costModifiers && param.costModifiers[val] !== undefined) {
+              creditCost += Number(param.costModifiers[val]) || 0;
+            } else if (Array.isArray(param.costModifiers) && param.options) {
+              const optIndex = param.options.indexOf(val);
+              if (optIndex !== -1 && param.costModifiers[optIndex] !== undefined) {
+                creditCost += Number(param.costModifiers[optIndex]) || 0;
               }
-            } catch (pollErr) {
-              console.error("MuAPI polling error:", pollErr);
+            }
+          } else if (param.type === "boolean") {
+            const isTrue = val === true || val === "true" || val === 1 || val === "1";
+            if (isTrue && param.costIfTrue !== undefined) {
+              creditCost += Number(param.costIfTrue) || 0;
+            }
+          } else if (param.type === "number" || param.type === "slider") {
+            if (param.costPerUnit !== undefined) {
+              const numVal = Number(val) || 0;
+              creditCost += numVal * (Number(param.costPerUnit) || 0);
             }
           }
+        });
+      }
+
+      modelName = parsedConfig.model || null;
+
+      // Merge system instructions/prompts
+      if (appInstance.templateId === "ai-chat") {
+        endpointToCall = parsedConfig.modelEndpoint || "chat/completions";
+      } else {
+        if (inputImage) {
+          endpointToCall = parsedConfig.editModelEndpoint || parsedConfig.modelEndpoint || "predictions";
+          modelName = parsedConfig.editModel || parsedConfig.model || null;
         } else {
-          const errText = await submitRes.text();
-          console.error("MuAPI generation submission failed:", submitRes.status, errText);
+          endpointToCall = parsedConfig.modelEndpoint || "predictions";
         }
-      } catch (err) {
-        console.warn("MuAPI call failed, falling back to local mock:", err.message);
       }
     }
 
-    // Mock Mode fallback or if polling timed out
-    if (status === "processing") {
-      await new Promise(resolve => setTimeout(resolve, 3000)); // simulate delay
-      const randomIndex = Math.floor(Math.random() * MOCK_GROUP_PHOTOS.length);
-      resultImage = MOCK_GROUP_PHOTOS[randomIndex];
-      status = "completed";
-    }
-
-    // Save creation record in database
-    const record = await prisma.groupPhotoCreation.create({
-      data: {
-        userId: session.user.id,
-        prompt: prompt || "AI Group Photo Generation",
-        inputImage: imagesList.join(","),
-        templateImage: null,
-        resultImage: resultImage || null,
-        requestId,
-        status,
-        aspectRatio: aspectRatio || "1:1",
-        activeTab: "custom",
-        creditCost: cost
-      }
+    const result = await AIService.generate(userId, {
+      prompt: formattedPrompt,
+      inputImage,
+      aspectRatio,
+      modelEndpoint: endpointToCall,
+      appId,
+      creditCost,
+      model: modelName,
+      customParams,
     });
 
-    return NextResponse.json({
-      id: record.id,
-      resultImage: record.resultImage,
-      status: record.status,
-      requestId: record.requestId
-    });
-
+    return NextResponse.json(result);
   } catch (error) {
-    console.error("[GENERATION_POST_ERROR]", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
+    console.error("Generation handler crash:", error);
+    return NextResponse.json({ error: error.message || "Failed to process generation" }, { status: 500 });
   }
 }

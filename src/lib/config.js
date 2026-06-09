@@ -1,4 +1,5 @@
 const config = {
+  appName: "AI SaaS",
   auth: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID,
@@ -13,15 +14,16 @@ const config = {
     secretKey: process.env.STRIPE_SECRET_KEY,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
     plans: {
-      basic: { id: "basic", name: "Basic Pack", credits: 1000, price: 500 },
-      standard: { id: "standard", name: "Standard Pack", credits: 2000, price: 1000 },
-      pro: { id: "pro", name: "Professional Pack", credits: 4000, price: 2000 },
-      business: { id: "business", name: "Business Pack", credits: 10000, price: 5000 },
+      basic: { id: "basic", name: "Basic Pack", credits: 100, price: 500 },
+      standard: { id: "standard", name: "Standard Pack", credits: 250, price: 1000 },
+      pro: { id: "pro", name: "Professional Pack", credits: 600, price: 2000 },
+      business: { id: "business", name: "Business Pack", credits: 2000, price: 5000 },
     }
   },
   ai: {
     apiKey: process.env.MUAPIAPP_API_KEY,
-    generationCost: 18, // Deducted per AI generation call
+    generationCost: 1, // Default cost per AI call
   }
 };
+
 export default config;
