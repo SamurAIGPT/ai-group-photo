@@ -9,6 +9,11 @@
 
 https://github.com/user-attachments/assets/48aab2e2-2e2a-4797-bb64-48f9004488ec
 
+## Related Projects
+
+- [MuAPI image-editing playground](https://muapi.ai/playground/gpt-image-2-image-to-image?utm_source=github&utm_medium=readme&utm_campaign=ai-group-photo) — compose and refine multi-image portrait workflows
+- [MuAPI model catalog](https://muapi.ai/docs/models?utm_source=github&utm_medium=readme&utm_campaign=ai-group-photo) — browse the available image and video models
+
 ## 🌐 Project Details
 
 **GitHub Repository:** [github.com/SamurAIGPT/ai-group-photo](https://github.com/SamurAIGPT/ai-group-photo)
